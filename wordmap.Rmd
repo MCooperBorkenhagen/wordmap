@@ -1,0 +1,114 @@
+---
+title: "wordmap"
+output: html_document
+date: "2026-09-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(tidyverse)
+require(Hmisc)
+require(papaja)
+
+source("utilities.R")
+```
+
+```{r reads, include=FALSE}
+elp = readRDS("raw/restrictedELP.rds")
+
+elp = elp |> 
+  filter(str_detect(word, "^[[:alpha:]]+$")) |> 
+  mutate(word = tolower(word))
+
+str_detect("flag's", "^[[:alpha:]]+$")
+
+  
+delp = read_csv("raw/full_item_level_database.csv")
+
+# read in but unused
+coca = read_csv("raw/fiction_counts.csv") |> 
+  mutate(word = tolower(word)) |> 
+  group_by(word) |> 
+  summarise(frequency = sum(freq)) |> 
+  filter(str_detect(word, "^[[:alpha:]]+$")) |> 
+  mutate(freq_decile = ntile(frequency, 10))
+
+# already lowercase
+tasa = readxl::read_xlsx("raw/tasa_1995.xlsx")
+
+tasa = tasa |> 
+  filter(str_detect(Word, "^[[:alpha:]]+$")) |> 
+  rename(word = Word)
+
+words_in_tasa_not_in_delp = tasa$word[unique(tasa$word) %nin% delp$word_lowercase]
+words_in_elp_restricted_not_in_delp = elp$word[unique(elp$word) %nin% delp$word_lowercase]
+
+wordmap = tibble(word = c(words_in_tasa_not_in_delp, words_in_elp_restricted_not_in_delp)) |> 
+  mutate(in_elp = case_when(word %in% elp$word ~ TRUE,
+                            TRUE ~ FALSE),
+         in_tasa = case_when(word %in% tasa$word ~ TRUE, 
+                             TRUE ~ FALSE))
+
+# write target_words for wordmap for introspection
+
+wordmap |> 
+  write_csv("~/Desktop/wordmap_candidate_words.csv")
+
+
+```
+
+## Select words
+We need a set of words. We will use the restricted ELP set plus the TASA words (up to and including 5th grade) that are not in the restricted ELP words. Try to figure out what the ELP criteria were 
+
+
+There are ```r sum(unique(tasa$Word) %nin% delp$word_lowercase)``` words that are in TASA but not d-ELP.
+
+
+
+
+## Other word properties from various resources.
+### Comparisons with COCA
+
+```{r TasaWordsInCOCA}
+coca |> 
+  mutate(in_tasa_not_in_delp = case_when(word %in% words_in_tasa_not_in_delp ~ TRUE,
+         TRUE ~ FALSE)) |> 
+  filter(in_tasa_not_in_delp) |>
+  ggplot(aes(freq_decile)) +
+  geom_histogram(binwidth = 1, color = "black") +
+  labs(x = "Frequency Decile in COCA",
+       y = "Count",
+       title = "Words in TASA not in DELP but Present in COCA") +
+  theme_apa()
+
+```
+
+```{r COCAWordNotInTASAOrDELP}
+coca |> 
+  mutate(in_tasa_not_in_delp = case_when(word %in% words_in_tasa_not_in_delp ~ TRUE,
+         TRUE ~ FALSE)) |> 
+  filter(!in_tasa_not_in_delp) |>
+  filter(word %nin% delp$word_lowercase) |> 
+  ggplot(aes(freq_decile)) +
+  geom_histogram(binwidth = 1, color = "black") +
+  labs(x = "Frequency Decile in COCA",
+       y = "Count",
+       title = "Words in COCA not in TASA or DELP") +
+  theme_apa()
+
+```
+
+
+
+
+```{r COCAWordNotInTASAOrDELPTopN}
+coca |> 
+  mutate(in_tasa_not_in_delp = case_when(word %in% words_in_tasa_not_in_delp ~ TRUE,
+         TRUE ~ FALSE)) |> 
+  filter(!in_tasa_not_in_delp) |>
+  filter(word %nin% delp$word_lowercase) |> 
+  filter(str_detect(word, "^[[:alpha:]]+$")) |> 
+  arrange(desc(freq)) |> 
+  view()
+
+```
